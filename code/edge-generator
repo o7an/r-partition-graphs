@@ -1,0 +1,21 @@
+edges_text = """
+%enter edges here
+"""
+
+import re
+
+E = []
+for line in edges_text.strip().splitlines():
+    a, b = re.findall(r'V\d+', line)
+    E.append((a, b))
+
+V = sorted(set([x for edge in E for x in edge]))
+
+G = Graph()
+G.add_vertices(V)
+G.add_edges(E)
+
+print("Number of vertices:", G.num_verts())
+print("Number of edges:", G.num_edges())
+print("Chromatic number:", G.chromatic_number())
+print("One coloring:", G.coloring())
