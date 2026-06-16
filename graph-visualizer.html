@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graph Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #fbfbfd;            /* Apple off-white */
+    --surface: #ffffff;
+    --ink: #1d1d1f;           /* Apple near-black */
+    --ink-soft: #6e6e73;      /* Apple secondary gray */
+    --ink-faint: #86868b;
+    --line: #f0f0f2;
+    --line-mid: #d2d2d7;      /* Apple hairline */
+    --accent: #0071e3;        /* Apple blue */
+    --accent-hover: #0077ed;
+    --accent-soft: #e8f1fd;
+    --vertex: #1d1d1f;
+    --vertex-fill: #ffffff;
+    --vertex-sel: #0071e3;
+    --edge: #b0b0b5;
+    --grid: #f2f2f4;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  header {
+    padding: 22px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: rgba(251,251,253,0.8);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--line);
+    z-index: 10;
+  }
+  header h1 {
+    font-weight: 600;
+    font-size: 21px;
+    letter-spacing: -0.02em;
+  }
+  header .sub {
+    font-size: 13px;
+    color: var(--ink-faint);
+    font-weight: 400;
+  }
+
+  .main { flex: 1; display: flex; min-height: 0; }
+
+  .canvas-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
+  #graph {
+    width: 100%; height: 100%; display: block; cursor: crosshair;
+    background: var(--bg);
+  }
+
+  .toolbar {
+    position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; align-items: center;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    padding: 7px;
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    border: 0.5px solid var(--line-mid);
+  }
+  .btn {
+    font-family: var(--font);
+    font-size: 13px; font-weight: 500;
+    padding: 8px 15px;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 12px;
+    letter-spacing: -0.01em;
+    transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+    white-space: nowrap;
+  }
+  .btn:hover { background: rgba(0,0,0,0.05); }
+  .btn:active { transform: scale(0.96); }
+  .btn.on { background: var(--ink); color: #fff; }
+  .btn.on:hover { background: #000; }
+  .btn.primary { background: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.danger { color: #ff3b30; }
+  .btn.danger:hover { background: rgba(255,59,48,0.08); }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+  .btn:disabled:hover { background: transparent; }
+  .btn:disabled:active { transform: none; }
+  .sep { width: 0.5px; height: 20px; background: var(--line-mid); margin: 0 4px; }
+
+  .menu-wrap { position: relative; }
+  .menu {
+    display: none;
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.86);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    border: 0.5px solid var(--line-mid);
+    padding: 6px; min-width: 232px; z-index: 30;
+  }
+  .menu.show { display: block; }
+  .menu-item {
+    display: flex; flex-direction: column; align-items: flex-start;
+    width: 100%; text-align: left;
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 9px 12px; border: none; background: transparent; color: var(--ink);
+    cursor: pointer; border-radius: 9px; letter-spacing: -0.01em;
+    transition: background 0.15s;
+  }
+  .menu-item:hover { background: rgba(0,0,0,0.05); }
+  .menu-item:active { background: rgba(0,0,0,0.09); }
+  .menu-sub { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-top: 1px; }
+  .menu-div { height: 0.5px; background: var(--line-mid); margin: 5px 8px; }
+
+  .palette {
+    position: absolute; top: 78px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    padding: 9px 14px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    border: 0.5px solid var(--line-mid);
+  }
+  .palette.show { display: flex; }
+  .palette .pal-label { font-size: 12px; color: var(--ink-faint); font-weight: 500; margin-right: 2px; }
+  .swatch {
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.08); cursor: pointer; padding: 0;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .swatch:hover { transform: scale(1.15); }
+  .swatch.active { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+  .swatch.none {
+    background: #fff !important; position: relative;
+  }
+  .swatch.none::after {
+    content: ''; position: absolute; left: 3px; top: 10px; right: 3px; height: 2px;
+    background: #ff3b30; transform: rotate(-45deg); border-radius: 2px;
+  }
+
+  .hint {
+    position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+    font-size: 12.5px; color: var(--ink-faint);
+    background: rgba(255,255,255,0.7);
+    padding: 8px 16px; border-radius: 14px;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border: 0.5px solid var(--line);
+    font-weight: 400;
+  }
+  .layout-tag {
+    position: absolute; bottom: 22px; right: 24px;
+    font-size: 12px; color: var(--ink-soft); font-weight: 500;
+    background: rgba(255,255,255,0.7);
+    border: 0.5px solid var(--line-mid);
+    padding: 8px 16px; border-radius: 980px;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    opacity: 0; transition: opacity 0.5s ease;
+  }
+  .layout-tag.show { opacity: 1; }
+
+  .zoom-ctl {
+    position: absolute; top: 50%; right: 24px; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 0;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    border: 0.5px solid var(--line-mid);
+    overflow: hidden;
+  }
+  .zoom-ctl button {
+    font-family: var(--font);
+    width: 40px; height: 40px;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--ink); font-size: 18px; font-weight: 400;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .zoom-ctl button:hover { background: rgba(0,0,0,0.05); }
+  .zoom-ctl button:active { background: rgba(0,0,0,0.1); }
+  .zoom-ctl .divider { height: 0.5px; background: var(--line-mid); }
+  .zoom-ctl .zlabel {
+    font-size: 10.5px; color: var(--ink-faint); font-weight: 500;
+    text-align: center; padding: 6px 0; min-width: 40px;
+    border-top: 0.5px solid var(--line-mid);
+    cursor: default;
+  }
+  .zoom-ctl button.fit { font-size: 13px; font-weight: 500; }
+
+  .panel {
+    width: 380px;
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow-y: auto;
+    padding: 8px;
+    gap: 8px;
+  }
+  .panel::-webkit-scrollbar { width: 8px; }
+  .panel::-webkit-scrollbar-thumb { background: var(--line-mid); border-radius: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+
+  .card {
+    background: var(--surface);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
+    border: 0.5px solid var(--line);
+  }
+  .card h2 {
+    font-size: 17px; font-weight: 600; letter-spacing: -0.02em;
+    margin-bottom: 4px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .card h2 .badge {
+    font-size: 12px; font-weight: 500;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 3px 10px; border-radius: 980px;
+    letter-spacing: 0;
+  }
+  .card .desc { font-size: 12.5px; color: var(--ink-faint); margin-bottom: 14px; line-height: 1.45; font-weight: 400; }
+  .card .desc b { color: var(--ink-soft); font-weight: 600; }
+  textarea {
+    width: 100%;
+    font-family: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+    font-size: 13px; line-height: 1.7;
+    padding: 13px 15px;
+    border: 1px solid var(--line-mid);
+    background: var(--bg);
+    color: var(--ink);
+    resize: vertical; min-height: 78px;
+    border-radius: 12px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .row { display: flex; gap: 9px; margin-top: 12px; }
+  .pill {
+    flex: 1; text-align: center;
+    font-family: var(--font); font-size: 13px; font-weight: 500;
+    padding: 11px; border-radius: 980px; cursor: pointer; border: none;
+    background: var(--ink); color: #fff;
+    transition: all 0.22s cubic-bezier(0.4,0,0.2,1);
+    letter-spacing: -0.01em;
+  }
+  .pill:hover { background: #000; }
+  .pill:active { transform: scale(0.97); }
+  .pill.ghost { background: var(--accent-soft); color: var(--accent); }
+  .pill.ghost:hover { background: #dceafb; }
+
+  pre.tikz {
+    background: #1d1d1f; color: #f5f5f7;
+    font-family: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+    font-size: 11.5px; line-height: 1.6;
+    padding: 16px; overflow-x: auto; border-radius: 12px;
+    max-height: 220px; white-space: pre;
+  }
+  pre.tikz::-webkit-scrollbar { height: 7px; }
+  pre.tikz::-webkit-scrollbar-thumb { background: #48484a; border-radius: 4px; }
+  .err { color: #ff3b30; font-size: 12px; margin-top: 8px; min-height: 15px; font-weight: 400; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Graph Studio</h1>
+    <span class="sub">Click to add · connect vertices · or paste an edge set and build · Layout ▾ to arrange &amp; color</span>
+  </header>
+
+  <div class="main">
+    <div class="canvas-wrap">
+      <svg id="graph"></svg>
+      <div class="toolbar">
+        <button class="btn on" id="modeAdd">Add</button>
+        <button class="btn" id="modeColor">Color</button>
+        <button class="btn" id="modeDelete">Delete</button>
+        <div class="sep"></div>
+        <button class="btn" id="undoBtn" title="Undo (⌘Z)" disabled>↶</button>
+        <button class="btn" id="redoBtn" title="Redo (⌘⇧Z)" disabled>↷</button>
+        <div class="sep"></div>
+        <div class="menu-wrap">
+          <button class="btn primary" id="layoutBtn">Layout ▾</button>
+          <div class="menu" id="layoutMenu">
+            <button class="menu-item" data-layout="auto">Tidy (auto)</button>
+            <button class="menu-item" data-layout="layered">Layered <span class="menu-sub">partition / by rank</span></button>
+            <button class="menu-item" data-layout="circle">Circular</button>
+            <div class="menu-div"></div>
+            <button class="menu-item" data-layout="chromatic">Color by chromatic number</button>
+          </div>
+        </div>
+        <div class="sep"></div>
+        <button class="btn danger" id="clearBtn">Clear</button>
+        <button class="btn" id="pdfBtn">PDF</button>
+        <button class="btn" id="jpgBtn">JPG</button>
+      </div>
+      <div class="palette" id="palette">
+        <span class="pal-label">Fill</span>
+        <button class="swatch" data-color="#ff3b30" style="background:#ff3b30" title="Red"></button>
+        <button class="swatch" data-color="#ff9500" style="background:#ff9500" title="Orange"></button>
+        <button class="swatch" data-color="#ffcc00" style="background:#ffcc00" title="Yellow"></button>
+        <button class="swatch" data-color="#34c759" style="background:#34c759" title="Green"></button>
+        <button class="swatch" data-color="#0071e3" style="background:#0071e3" title="Blue"></button>
+        <button class="swatch" data-color="#5856d6" style="background:#5856d6" title="Indigo"></button>
+        <button class="swatch" data-color="#af52de" style="background:#af52de" title="Purple"></button>
+        <button class="swatch" data-color="#ff2d92" style="background:#ff2d92" title="Pink"></button>
+        <button class="swatch none" data-color="" title="No fill"></button>
+      </div>
+      <div class="zoom-ctl">
+        <button id="zoomIn" title="Zoom in">+</button>
+        <div class="divider"></div>
+        <button id="zoomOut" title="Zoom out">−</button>
+        <button class="fit" id="zoomFit" title="Fit to view">⤢</button>
+        <div class="zlabel" id="zlabel">100%</div>
+      </div>
+      <div class="hint" id="hint">Click empty space to add a vertex. Click a vertex, then another, to draw an edge. Scroll to zoom · drag canvas to pan.</div>
+      <div class="layout-tag" id="layoutTag"></div>
+    </div>
+
+    <div class="panel">
+      <div class="card">
+        <h2>Vertex set <span class="badge" id="vBadge">|V| = 0</span></h2>
+        <div class="desc">Format <b>A:(x,y)</b> per line. Edit and apply to regenerate.</div>
+        <textarea id="vText" spellcheck="false"></textarea>
+        <div class="err" id="vErr"></div>
+        <div class="row"><button class="pill" id="vApply">Apply vertices</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Edge set <span class="badge" id="eBadge">|E| = 0</span></h2>
+        <div class="desc">Format <b>{A,B}</b> · <b>A-B</b> · <b>AB</b> per line or comma-separated. Any vertex not already present is <b>created automatically</b> — paste an edge set with no vertex set and it builds the graph for you.</div>
+        <textarea id="eText" spellcheck="false"></textarea>
+        <div class="err" id="eErr"></div>
+        <div class="row"><button class="pill" id="eApply">Apply edges</button><button class="pill ghost" id="eBuild">Build from edges only</button></div>
+      </div>
+
+      <div class="card">
+        <h2>TikZ code</h2>
+        <div class="desc">Drop into a LaTeX <b>tikzpicture</b> (needs <b>\usepackage{tikz}</b>).</div>
+        <pre class="tikz" id="tikz"></pre>
+        <div class="row"><button class="pill ghost" id="copyTikz">Copy TikZ</button></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const svg = document.getElementById('graph');
+const SVGNS = 'http://www.w3.org/2000/svg';
+const R = 17;
+
+let vertices = [];   // {id, label, x, y, color}
+let edges = [];      // {a, b}
+let nextId = 0;
+let mode = 'add';
+let selected = null;
+let dragMoved = false;
+let currentColor = '#0071e3';   // active palette fill
+
+/* ---------- undo / redo history ---------- */
+let history = [];
+let histIndex = -1;
+function snapshot(){
+  return JSON.stringify({
+    vertices: vertices.map(v=>({id:v.id,label:v.label,x:v.x,y:v.y,color:v.color||null})),
+    edges: edges.map(e=>({a:e.a,b:e.b})),
+    nextId
+  });
+}
+function restore(snap){
+  const s=JSON.parse(snap);
+  vertices=s.vertices.map(v=>({id:v.id,label:v.label,x:v.x,y:v.y,color:v.color||undefined}));
+  edges=s.edges.map(e=>({a:e.a,b:e.b}));
+  nextId=s.nextId; selected=null;
+}
+function pushHistory(){
+  // drop any redo branch, then record current state
+  history=history.slice(0,histIndex+1);
+  history.push(snapshot());
+  if(history.length>200) history.shift();
+  histIndex=history.length-1;
+  updateUndoButtons();
+}
+function undo(){
+  if(histIndex<=0) return;
+  histIndex--; restore(history[histIndex]); render(); updateUndoButtons();
+}
+function redo(){
+  if(histIndex>=history.length-1) return;
+  histIndex++; restore(history[histIndex]); render(); updateUndoButtons();
+}
+function updateUndoButtons(){
+  const u=document.getElementById('undoBtn'), r=document.getElementById('redoBtn');
+  if(u) u.disabled = histIndex<=0;
+  if(r) r.disabled = histIndex>=history.length-1;
+}
+
+/* ---------- view transform (zoom + pan) ---------- */
+let view = { k: 1, tx: 0, ty: 0 };   // world->screen: screen = world*k + t
+const MIN_K = 0.15, MAX_K = 6;
+function screenToWorld(sx, sy){ return { x:(sx-view.tx)/view.k, y:(sy-view.ty)/view.k }; }
+function clampK(k){ return Math.max(MIN_K, Math.min(MAX_K, k)); }
+function applyView(){
+  const root=document.getElementById('viewRoot');
+  if(root) root.setAttribute('transform', `translate(${view.tx},${view.ty}) scale(${view.k})`);
+  const grid=document.getElementById('gridRect');
+  if(grid){
+    // pattern offset follows pan so dots feel anchored to the canvas
+    const sp=26*view.k;
+    grid.setAttribute('data-step', sp);
+    const pat=document.getElementById('dotgrid');
+    if(pat){
+      const step=Math.max(6, 26*view.k);
+      pat.setAttribute('width', step); pat.setAttribute('height', step);
+      pat.setAttribute('patternTransform', `translate(${view.tx % step},${view.ty % step})`);
+      const dot=pat.firstChild;
+      const r=Math.min(1.6, 1.2*Math.max(view.k,0.6));
+      dot.setAttribute('cx', step/2); dot.setAttribute('cy', step/2); dot.setAttribute('r', r);
+    }
+  }
+  const zl=document.getElementById('zlabel'); if(zl) zl.textContent=Math.round(view.k*100)+'%';
+}
+
+/* ---------- labels ---------- */
+function genLabel(i){
+  const letter = String.fromCharCode(65 + (i % 26));
+  const cycle = Math.floor(i / 26);
+  return letter + (cycle === 0 ? '' : cycle);
+}
+function freshLabel(){
+  const used = new Set(vertices.map(v=>v.label));
+  let i=0,l; do{ l=genLabel(i++); }while(used.has(l)); return l;
+}
+function rect(){ return svg.getBoundingClientRect(); }
+
+function addVertex(x,y,label){
+  const v={id:nextId++, label:label||freshLabel(), x, y};
+  vertices.push(v); return v;
+}
+const vById = id=>vertices.find(v=>v.id===id);
+const vByLabel = l=>vertices.find(v=>v.label===l);
+const edgeExists = (a,b)=>edges.some(e=>(e.a===a&&e.b===b)||(e.a===b&&e.b===a));
+function addEdge(a,b){ if(a!==b && !edgeExists(a,b)) edges.push({a,b}); }
+
+/* ---------- color helpers ---------- */
+function hexToRgb(h){ const x=h.replace('#',''); return {r:parseInt(x.slice(0,2),16),g:parseInt(x.slice(2,4),16),b:parseInt(x.slice(4,6),16)}; }
+function darken(h){ const c=hexToRgb(h); const f=0.75; return `rgb(${Math.round(c.r*f)},${Math.round(c.g*f)},${Math.round(c.b*f)})`; }
+function textOn(h){ const c=hexToRgb(h); const lum=(0.299*c.r+0.587*c.g+0.114*c.b)/255; return lum>0.62 ? '#1d1d1f' : '#ffffff'; }
+
+/* ---------- render ---------- */
+function render(){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+  // grid pattern (in screen space, but offset/scaled via transform to track pan/zoom)
+  const defs=document.createElementNS(SVGNS,'defs');
+  const pat=document.createElementNS(SVGNS,'pattern');
+  pat.setAttribute('id','dotgrid'); pat.setAttribute('width','26'); pat.setAttribute('height','26');
+  pat.setAttribute('patternUnits','userSpaceOnUse');
+  const dot=document.createElementNS(SVGNS,'circle');
+  dot.setAttribute('cx','1.2'); dot.setAttribute('cy','1.2'); dot.setAttribute('r','1.2');
+  dot.setAttribute('fill','var(--grid)');
+  pat.appendChild(dot); defs.appendChild(pat); svg.appendChild(defs);
+
+  const r=rect();
+  const gridRect=document.createElementNS(SVGNS,'rect');
+  gridRect.setAttribute('id','gridRect');
+  gridRect.setAttribute('x','0'); gridRect.setAttribute('y','0');
+  gridRect.setAttribute('width','100%'); gridRect.setAttribute('height','100%');
+  gridRect.setAttribute('fill','url(#dotgrid)');
+  gridRect.style.pointerEvents='none';
+  svg.appendChild(gridRect);
+
+  const root=document.createElementNS(SVGNS,'g');
+  root.setAttribute('id','viewRoot');
+  svg.appendChild(root);
+
+  edges.forEach(e=>{
+    const va=vById(e.a), vb=vById(e.b); if(!va||!vb)return;
+    const line=document.createElementNS(SVGNS,'line');
+    line.setAttribute('x1',va.x);line.setAttribute('y1',va.y);
+    line.setAttribute('x2',vb.x);line.setAttribute('y2',vb.y);
+    line.setAttribute('stroke','var(--edge)');line.setAttribute('stroke-width','1.6');
+    line.setAttribute('stroke-linecap','round');
+    root.appendChild(line);
+  });
+  vertices.forEach(v=>{
+    const g=document.createElementNS(SVGNS,'g'); g.style.cursor='pointer';
+    const c=document.createElementNS(SVGNS,'circle');
+    const col=v.color;
+    c.setAttribute('cx',v.x);c.setAttribute('cy',v.y);c.setAttribute('r',R);
+    if(selected===v.id){
+      c.setAttribute('fill', col || 'var(--accent-soft)');
+      c.setAttribute('stroke','var(--vertex-sel)');
+      c.setAttribute('stroke-width','2.6');
+    } else {
+      c.setAttribute('fill', col || 'var(--vertex-fill)');
+      c.setAttribute('stroke', col ? darken(col) : 'var(--vertex)');
+      c.setAttribute('stroke-width','1.6');
+    }
+    c.style.filter='drop-shadow(0 1px 2px rgba(0,0,0,0.08))';
+    const t=document.createElementNS(SVGNS,'text');
+    t.setAttribute('x',v.x);t.setAttribute('y',v.y);
+    t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');
+    t.setAttribute('font-family','-apple-system, BlinkMacSystemFont, sans-serif');
+    t.setAttribute('font-size','13');t.setAttribute('font-weight','600');
+    t.setAttribute('fill', col ? textOn(col) : (selected===v.id?'var(--vertex-sel)':'var(--ink)'));
+    t.textContent=v.label; t.style.pointerEvents='none';
+    g.appendChild(c);g.appendChild(t);
+    g.addEventListener('mousedown',ev=>onVertexDown(ev,v.id));
+    root.appendChild(g);
+  });
+
+  applyView();
+  syncText(); syncTikz();
+}
+
+/* ---------- interactions ---------- */
+svg.addEventListener('mousedown', ev=>{
+  if(ev.target!==svg && ev.target.id!=='gridRect' && ev.target.id!=='viewRoot') return;
+  const r=rect();
+  const startX=ev.clientX, startY=ev.clientY;
+  const startTx=view.tx, startTy=view.ty;
+  let panned=false;
+  function move(e){
+    if(Math.abs(e.clientX-startX)+Math.abs(e.clientY-startY)>3) panned=true;
+    if(panned){
+      view.tx=startTx+(e.clientX-startX);
+      view.ty=startTy+(e.clientY-startY);
+      svg.style.cursor='grabbing';
+      applyView();
+    }
+  }
+  function up(e){
+    document.removeEventListener('mousemove',move);
+    document.removeEventListener('mouseup',up);
+    svg.style.cursor = mode==='add'?'crosshair':(mode==='color'?'pointer':'not-allowed');
+    if(!panned && mode==='add'){
+      const w=screenToWorld(e.clientX-r.left, e.clientY-r.top);
+      addVertex(w.x, w.y); selected=null; render(); pushHistory();
+    }
+  }
+  document.addEventListener('mousemove',move);
+  document.addEventListener('mouseup',up);
+});
+function onVertexDown(ev,id){
+  ev.stopPropagation();
+  if(mode==='delete'){ deleteVertex(id); pushHistory(); return; }
+  if(mode==='color'){
+    const v=vById(id);
+    v.color = currentColor || undefined;
+    render(); pushHistory(); return;
+  }
+  dragMoved=false;
+  const r=rect(), v=vById(id);
+  const w=screenToWorld(ev.clientX-r.left, ev.clientY-r.top);
+  const offX=w.x-v.x, offY=w.y-v.y;
+  function move(e){
+    dragMoved=true;
+    const w2=screenToWorld(e.clientX-r.left, e.clientY-r.top);
+    v.x=w2.x-offX; v.y=w2.y-offY; render();
+  }
+  function up(){
+    document.removeEventListener('mousemove',move);
+    document.removeEventListener('mouseup',up);
+    if(!dragMoved){
+      if(selected===null) selected=id;
+      else if(selected===id) selected=null;
+      else { addEdge(selected,id); selected=null; render(); pushHistory(); return; }
+      render();
+    } else {
+      render(); pushHistory();   // record the move
+    }
+  }
+  document.addEventListener('mousemove',move);
+  document.addEventListener('mouseup',up);
+}
+function deleteVertex(id){
+  vertices=vertices.filter(v=>v.id!==id);
+  edges=edges.filter(e=>e.a!==id&&e.b!==id);
+  if(selected===id) selected=null; render();
+}
+
+/* ---------- modes ---------- */
+const modeAdd=document.getElementById('modeAdd'), modeColor=document.getElementById('modeColor'), modeDelete=document.getElementById('modeDelete');
+const palette=document.getElementById('palette');
+function setMode(m){
+  mode=m; selected=null;
+  modeAdd.classList.toggle('on', m==='add');
+  modeColor.classList.toggle('on', m==='color');
+  modeDelete.classList.toggle('on', m==='delete');
+  palette.classList.toggle('show', m==='color');
+  svg.style.cursor = m==='add'?'crosshair':(m==='color'?'pointer':'not-allowed');
+  const hints={
+    add:'Click empty space to add a vertex. Click a vertex, then another, to draw an edge.',
+    color:'Pick a color above, then click vertices to fill them.',
+    delete:'Click a vertex to delete it and its edges.'
+  };
+  document.getElementById('hint').textContent=hints[m];
+  render();
+}
+modeAdd.onclick=()=>setMode('add');
+modeColor.onclick=()=>setMode('color');
+modeDelete.onclick=()=>setMode('delete');
+
+/* palette swatches */
+const swatches=[...palette.querySelectorAll('.swatch')];
+function setSwatch(el){
+  swatches.forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  currentColor=el.dataset.color;   // '' means clear fill
+}
+swatches.forEach(s=> s.onclick=()=>{ setSwatch(s); if(mode!=='color') setMode('color'); });
+// default active = blue
+setSwatch(swatches.find(s=>s.dataset.color==='#0071e3'));
+
+document.getElementById('clearBtn').onclick=()=>{vertices=[];edges=[];selected=null;nextId=0;render();pushHistory();};
+
+/* ---------- undo / redo ---------- */
+document.getElementById('undoBtn').onclick=undo;
+document.getElementById('redoBtn').onclick=redo;
+window.addEventListener('keydown', ev=>{
+  const tag=(ev.target&&ev.target.tagName)||'';
+  if(tag==='TEXTAREA'||tag==='INPUT') return;   // don't hijack typing
+  const mod=ev.metaKey||ev.ctrlKey;
+  if(mod && ev.key.toLowerCase()==='z'){
+    ev.preventDefault();
+    if(ev.shiftKey) redo(); else undo();
+  } else if(mod && ev.key.toLowerCase()==='y'){
+    ev.preventDefault(); redo();
+  }
+});
+
+/* ---------- zoom & pan controls ---------- */
+svg.addEventListener('wheel', ev=>{
+  ev.preventDefault();
+  const r=rect();
+  const sx=ev.clientX-r.left, sy=ev.clientY-r.top;
+  const w=screenToWorld(sx,sy);
+  const factor=Math.exp(-ev.deltaY*0.0015);
+  const nk=clampK(view.k*factor);
+  // keep cursor point fixed: screen = world*k + t  →  t = screen - world*k
+  view.tx=sx-w.x*nk; view.ty=sy-w.y*nk; view.k=nk;
+  applyView();
+}, {passive:false});
+
+function zoomBy(factor){
+  const r=rect();
+  const sx=r.width/2, sy=r.height/2;
+  const w=screenToWorld(sx,sy);
+  const nk=clampK(view.k*factor);
+  view.tx=sx-w.x*nk; view.ty=sy-w.y*nk; view.k=nk;
+  applyView();
+}
+document.getElementById('zoomIn').onclick=()=>zoomBy(1.25);
+document.getElementById('zoomOut').onclick=()=>zoomBy(0.8);
+document.getElementById('zoomFit').onclick=fitToView;
+
+function fitToView(){
+  const r=rect();
+  if(vertices.length===0){ view={k:1,tx:0,ty:0}; applyView(); return; }
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);});
+  const pad=80;
+  const gw=Math.max(maxX-minX,1), gh=Math.max(maxY-minY,1);
+  const k=clampK(Math.min((r.width-2*pad)/gw,(r.height-2*pad)/gh));
+  view.k=k;
+  view.tx=(r.width-(minX+maxX)*k)/2;
+  view.ty=(r.height-(minY+maxY)*k)/2;
+  applyView();
+}
+
+/* ============================================================
+   TIDY LAYOUT  — pick the clearest arrangement for the graph
+   ============================================================ */
+function adj(){
+  const m=new Map(); vertices.forEach(v=>m.set(v.id,[]));
+  edges.forEach(e=>{ m.get(e.a).push(e.b); m.get(e.b).push(e.a); });
+  return m;
+}
+function components(A){
+  const seen=new Set(), comps=[];
+  for(const v of vertices){
+    if(seen.has(v.id)) continue;
+    const stack=[v.id], comp=[]; seen.add(v.id);
+    while(stack.length){ const u=stack.pop(); comp.push(u);
+      for(const w of A.get(u)) if(!seen.has(w)){seen.add(w);stack.push(w);} }
+    comps.push(comp);
+  }
+  return comps;
+}
+function compEdges(comp){ const s=new Set(comp); return edges.filter(e=>s.has(e.a)&&s.has(e.b)); }
+function isTree(comp){ return compEdges(comp).length===comp.length-1 && comp.length>0; }
+function isCycle(comp,A){ return comp.length>=3 && comp.every(id=>A.get(id).filter(w=>comp.includes(w)).length===2); }
+function isComplete(comp){ const n=comp.length; return n>=2 && compEdges(comp).length===n*(n-1)/2; }
+function bipartite(comp,A){
+  const cset=new Set(comp), color=new Map(); color.set(comp[0],0); const q=[comp[0]];
+  while(q.length){ const u=q.shift();
+    for(const w of A.get(u)){ if(!cset.has(w))continue;
+      if(!color.has(w)){color.set(w,color.get(u)^1);q.push(w);}
+      else if(color.get(w)===color.get(u))return null; }}
+  return color;
+}
+
+function tidyLayout(){
+  if(vertices.length===0) return;
+  const r=rect(), W=r.width, H=r.height;
+  const A=adj(), comps=components(A);
+  const placed=comps.map(comp=>layoutComponent(comp,A));
+  const margin=80; let cx=margin, cy=margin, rowH=0, maxW=W-margin; const tags=new Set();
+  for(const pc of placed){
+    if(cx+pc.w>maxW && cx>margin){ cx=margin; cy+=rowH+60; rowH=0; }
+    for(const [id,p] of pc.positions){ const v=vById(id); v.x=cx+p.x; v.y=cy+p.y; }
+    cx+=pc.w+60; rowH=Math.max(rowH,pc.h); tags.add(pc.kind);
+  }
+  centerDrawing(W,H);
+  showTag([...tags].join(' · '));
+  selected=null; render(); fitToView(); pushHistory();
+}
+
+function layoutComponent(comp,A){
+  const n=comp.length, positions=new Map(); let kind='force';
+  if(n===1){ positions.set(comp[0],{x:0,y:0}); return finalize(comp,positions,'isolated'); }
+  if(isComplete(comp)){ kind='complete'; circleLayout(comp,positions); }
+  else if(isCycle(comp,A)){ kind='cycle'; circleLayout(comp,positions); }
+  else if(isTree(comp)){ kind='tree'; treeLayout(comp,A,positions); }
+  else {
+    const col=bipartite(comp,A);
+    if(col){ kind='bipartite'; bipartiteLayout(comp,col,positions); }
+    else {
+      circleLayout(comp,positions);
+      forceRefine(comp,positions);
+      kind = crossingCount(positions)===0 ? 'planar' : 'force';
+    }
+  }
+  return finalize(comp,positions,kind);
+}
+function finalize(comp,positions,kind){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of positions.values()){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+  for(const p of positions.values()){p.x=p.x-minX+R;p.y=p.y-minY+R;}
+  return {positions, w:(maxX-minX)+2*R, h:(maxY-minY)+2*R, kind};
+}
+
+function circleLayout(comp,positions){
+  const n=comp.length, rad=Math.max(75,n*23);
+  comp.forEach((id,i)=>{ const a=i/n*2*Math.PI-Math.PI/2; positions.set(id,{x:rad*Math.cos(a),y:rad*Math.sin(a)}); });
+}
+function treeLayout(comp,A,positions){
+  let root=comp[0], best=-1;
+  comp.forEach(id=>{ const d=A.get(id).filter(w=>comp.includes(w)).length; if(d>best){best=d;root=id;} });
+  const level=new Map([[root,0]]), parent=new Map(), order=[], seen=new Set([root]), q=[root];
+  while(q.length){ const u=q.shift(); order.push(u);
+    for(const w of A.get(u)) if(comp.includes(w)&&!seen.has(w)){seen.add(w);level.set(w,level.get(u)+1);parent.set(w,u);q.push(w);} }
+  const children=new Map(); comp.forEach(c=>children.set(c,[]));
+  parent.forEach((p,c)=>children.get(p).push(c));
+  let leafX=0; const xpos=new Map();
+  (function place(u){ const ch=children.get(u);
+    if(ch.length===0){xpos.set(u,leafX++);return xpos.get(u);}
+    const xs=ch.map(place); xpos.set(u,(xs[0]+xs[xs.length-1])/2); return xpos.get(u); })(root);
+  const dx=75,dy=90;
+  comp.forEach(id=>positions.set(id,{x:xpos.get(id)*dx,y:level.get(id)*dy}));
+}
+function bipartiteLayout(comp,col,positions){
+  const left=comp.filter(id=>col.get(id)===0), right=comp.filter(id=>col.get(id)===1);
+  const dy=75,gap=250;
+  left.forEach((id,i)=>positions.set(id,{x:0,y:i*dy}));
+  right.forEach((id,i)=>positions.set(id,{x:gap,y:i*dy}));
+}
+function forceRefine(comp,positions){
+  const ideal=115, iters=300;
+  for(let it=0; it<iters; it++){
+    const disp=new Map(); comp.forEach(id=>disp.set(id,{x:0,y:0}));
+    for(let i=0;i<comp.length;i++)for(let j=i+1;j<comp.length;j++){
+      const a=positions.get(comp[i]),b=positions.get(comp[j]);
+      let dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy)||0.01;
+      const f=(ideal*ideal)/(d*d)*ideal*0.5; dx/=d;dy/=d;
+      disp.get(comp[i]).x+=dx*f;disp.get(comp[i]).y+=dy*f;
+      disp.get(comp[j]).x-=dx*f;disp.get(comp[j]).y-=dy*f;
+    }
+    edges.forEach(e=>{ if(!comp.includes(e.a)||!comp.includes(e.b))return;
+      const a=positions.get(e.a),b=positions.get(e.b);
+      let dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy)||0.01;
+      const f=(d*d)/ideal*0.02; dx/=d;dy/=d;
+      disp.get(e.a).x-=dx*f;disp.get(e.a).y-=dy*f;
+      disp.get(e.b).x+=dx*f;disp.get(e.b).y+=dy*f;
+    });
+    const t=Math.max(2,40*(1-it/iters));
+    comp.forEach(id=>{const p=positions.get(id),dp=disp.get(id);const dl=Math.hypot(dp.x,dp.y)||0.01;
+      p.x+=dp.x/dl*Math.min(dl,t);p.y+=dp.y/dl*Math.min(dl,t);});
+  }
+}
+function crossingCount(positions){
+  const segs=edges.map(e=>({a:positions.get(e.a),b:positions.get(e.b),e})).filter(s=>s.a&&s.b);
+  let c=0;
+  for(let i=0;i<segs.length;i++)for(let j=i+1;j<segs.length;j++){
+    const s=segs[i],t=segs[j];
+    if(s.e.a===t.e.a||s.e.a===t.e.b||s.e.b===t.e.a||s.e.b===t.e.b)continue;
+    if(segInt(s.a,s.b,t.a,t.b))c++;
+  }
+  return c;
+}
+function segInt(p1,p2,p3,p4){
+  const ccw=(A,B,C)=>(C.y-A.y)*(B.x-A.x)>(B.y-A.y)*(C.x-A.x);
+  return ccw(p1,p3,p4)!==ccw(p2,p3,p4)&&ccw(p1,p2,p3)!==ccw(p1,p2,p4);
+}
+function centerDrawing(W,H){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);});
+  const ox=(W-(maxX-minX))/2-minX, oy=(H-(maxY-minY))/2-minY;
+  vertices.forEach(v=>{v.x+=ox;v.y+=oy;});
+}
+/* ============================================================
+   CHROMATIC COLORING — greedy (Welsh–Powell), then map color
+   classes to the palette. Reports the number of colors used.
+   ============================================================ */
+const CHROMA_PALETTE = [
+  '#ff3b30', // red
+  '#0071e3', // blue
+  '#34c759', // green
+  '#ff9500', // orange
+  '#af52de', // purple
+  '#ffcc00', // yellow
+  '#ff2d92', // pink
+  '#5ac8fa', // teal
+  '#5856d6', // indigo
+  '#a2845e', // brown
+  '#8e8e93', // gray
+  '#00c7be'  // mint
+];
+function chromaticColor(){
+  if(vertices.length===0) return;
+  const A=adj();
+  // Welsh–Powell: order by descending degree, assign smallest feasible color index
+  const order=[...vertices].sort((u,v)=>A.get(v.id).length-A.get(u.id).length);
+  const colorIdx=new Map();
+  for(const v of order){
+    const used=new Set();
+    for(const w of A.get(v.id)){ if(colorIdx.has(w)) used.add(colorIdx.get(w)); }
+    let c=0; while(used.has(c)) c++;
+    colorIdx.set(v.id,c);
+  }
+  let k=0; colorIdx.forEach(c=>{ k=Math.max(k,c+1); });
+  vertices.forEach(v=>{
+    const c=colorIdx.get(v.id);
+    v.color = CHROMA_PALETTE[c % CHROMA_PALETTE.length];
+  });
+  selected=null; render();
+  showTag(`Proper coloring · ${k} color${k===1?'':'s'} (greedy upper bound on χ)`);
+  pushHistory();
+}
+
+/* ============================================================
+   LAYERED LAYOUT — arrange vertices in horizontal rows.
+   Designed for partition graphs G[[n],r]: rows are ranked so
+   the drawing is a symmetric pyramid/diamond like the example.
+   Ranking heuristic (no vertex set needed):
+     1) BFS levels from the single highest-degree "apex" vertex
+        when one clearly dominates (typical of partition graphs);
+     2) otherwise fall back to degree bands.
+   Each row is centered horizontally; rows are evenly spaced.
+   ============================================================ */
+function layeredLayout(){
+  if(vertices.length===0) return;
+  const r=rect(), W=r.width, H=r.height;
+  const A=adj();
+  const comps=components(A);
+
+  let cursorY=0; const ROW=110, COLGAP=96, COMPGAP=90;
+  let globalMaxW=0;
+  const compBlocks=[];
+
+  for(const comp of comps){
+    const layers=rankLayers(comp,A);
+    // assign positions: each layer is a centered row
+    const rowsW=layers.map(row=>Math.max(1,row.length)*COLGAP);
+    const blockW=Math.max(...rowsW,COLGAP);
+    const pos=new Map();
+    layers.forEach((row,li)=>{
+      const rowW=(row.length-1)*COLGAP;
+      const startX=(blockW-rowW)/2 - blockW/2;   // center each row about block center 0
+      // order within a row to reduce crossings: sort by mean x of neighbors in previous row
+      row.forEach((id,ci)=>{
+        pos.set(id,{x:startX+ci*COLGAP, y:li*ROW});
+      });
+    });
+    const blockH=(layers.length-1)*ROW;
+    compBlocks.push({pos,blockW,blockH});
+    globalMaxW=Math.max(globalMaxW,blockW);
+  }
+
+  // stack components vertically, centered
+  let y=0;
+  compBlocks.forEach(b=>{
+    b.pos.forEach((p,id)=>{ const v=vById(id); v.x=p.x; v.y=y+p.y; });
+    y += b.blockH + COMPGAP;
+  });
+
+  centerDrawing(W,H);
+  selected=null; render(); fitToView();
+  showTag('Layered (by rank)'); pushHistory();
+}
+
+/* Rank a component into ordered layers (array of arrays of vertex ids). */
+function rankLayers(comp,A){
+  if(comp.length===1) return [[comp[0]]];
+  const deg=id=>A.get(id).filter(w=>comp.includes(w)).length;
+  // find apex: the single vertex of maximum degree (ties -> pick one)
+  let apex=comp[0]; comp.forEach(id=>{ if(deg(id)>deg(apex)) apex=id; });
+  // BFS distance from apex
+  const dist=new Map([[apex,0]]); const q=[apex];
+  while(q.length){ const u=q.shift();
+    for(const w of A.get(u)){ if(comp.includes(w)&&!dist.has(w)){dist.set(w,dist.get(u)+1);q.push(w);} } }
+  // any unreached (shouldn't happen within a component) -> last layer
+  comp.forEach(id=>{ if(!dist.has(id)) dist.set(id, Infinity); });
+  // group by distance
+  const maxD=Math.max(...[...dist.values()].filter(d=>isFinite(d)));
+  const layers=[];
+  for(let d=0; d<=maxD; d++){
+    const row=comp.filter(id=>dist.get(id)===d);
+    if(row.length) layers.push(row);
+  }
+  const leftover=comp.filter(id=>!isFinite(dist.get(id)));
+  if(leftover.length) layers.push(leftover);
+  orderLayersByBarycenter(layers,A,comp);
+  return layers;
+}
+
+/* Reduce edge crossings by barycenter ordering (a few sweeps up & down). */
+function orderLayersByBarycenter(layers,A,comp){
+  const colIndex=new Map();
+  const reindex=()=>layers.forEach(row=>row.forEach((id,i)=>colIndex.set(id,i)));
+  reindex();
+  const nbrInRow=(id,row)=>row.filter(w=>A.get(id).includes(w));
+  for(let sweep=0; sweep<4; sweep++){
+    for(let li=1; li<layers.length; li++){
+      const prev=layers[li-1];
+      layers[li].sort((a,b)=>bary(a,prev)-bary(b,prev));
+    }
+    reindex();
+    for(let li=layers.length-2; li>=0; li--){
+      const next=layers[li+1];
+      layers[li].sort((a,b)=>bary(a,next)-bary(b,next));
+    }
+    reindex();
+  }
+  function bary(id,otherRow){
+    const ns=otherRow.map((w,i)=>A.get(id).includes(w)?i:null).filter(i=>i!==null);
+    if(ns.length===0) return colIndex.get(id)||0;
+    return ns.reduce((s,i)=>s+i,0)/ns.length;
+  }
+}
+
+/* ============================================================
+   CIRCULAR — place every vertex of every component on one ring
+   ============================================================ */
+function circularLayoutAll(){
+  if(vertices.length===0) return;
+  const r=rect();
+  const n=vertices.length, rad=Math.max(110, n*22);
+  vertices.forEach((v,i)=>{ const a=i/n*2*Math.PI-Math.PI/2; v.x=rad*Math.cos(a); v.y=rad*Math.sin(a); });
+  centerDrawing(r.width,r.height);
+  selected=null; render(); fitToView();
+  showTag('Circular'); pushHistory();
+}
+
+function showTag(txt){
+  const el=document.getElementById('layoutTag');
+  el.textContent='Layout: '+txt; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2600);
+}
+/* ---------- layout menu ---------- */
+const layoutBtn=document.getElementById('layoutBtn');
+const layoutMenu=document.getElementById('layoutMenu');
+layoutBtn.onclick=(e)=>{ e.stopPropagation(); layoutMenu.classList.toggle('show'); };
+document.addEventListener('click',()=>layoutMenu.classList.remove('show'));
+layoutMenu.addEventListener('click',e=>{
+  const item=e.target.closest('.menu-item'); if(!item)return;
+  layoutMenu.classList.remove('show');
+  const kind=item.dataset.layout;
+  if(kind==='auto') tidyLayout();
+  else if(kind==='layered') layeredLayout();
+  else if(kind==='circle') circularLayoutAll();
+  else if(kind==='chromatic') chromaticColor();
+});
+
+/* ---------- text sync ---------- */
+function syncText(){
+  const H=rect().height;
+  document.getElementById('vText').value=vertices.map(v=>`${v.label}:(${Math.round(v.x)},${Math.round(H-v.y)})`).join('\n');
+  document.getElementById('vBadge').textContent=`|V| = ${vertices.length}`;
+  document.getElementById('eText').value=edges.map(e=>`{${vById(e.a).label},${vById(e.b).label}}`).join('\n');
+  document.getElementById('eBadge').textContent=`|E| = ${edges.length}`;
+}
+document.getElementById('vApply').onclick=()=>{
+  const errEl=document.getElementById('vErr'); errEl.textContent='';
+  const H=rect().height;
+  const tokens=document.getElementById('vText').value.split(/\n|;/).map(s=>s.trim()).filter(Boolean);
+  const re=/^([A-Za-z][A-Za-z0-9_]*)\s*[:=]?\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)$/;
+  const newV=[], seen=new Set();
+  for(const tk of tokens){
+    const m=tk.match(re);
+    if(!m){errEl.textContent=`Can't parse: "${tk}"`;return;}
+    if(seen.has(m[1])){errEl.textContent=`Duplicate label: ${m[1]}`;return;}
+    seen.add(m[1]); newV.push({label:m[1],mx:parseFloat(m[2]),my:parseFloat(m[3])});
+  }
+  const oldEdges=edges.map(e=>({a:vById(e.a).label,b:vById(e.b).label}));
+  const oldColors=new Map(vertices.map(v=>[v.label,v.color]));
+  vertices=[];nextId=0;
+  newV.forEach(v=>{ const nv=addVertex(v.mx,H-v.my,v.label); if(oldColors.has(v.label)) nv.color=oldColors.get(v.label); });
+  edges=[];
+  oldEdges.forEach(({a,b})=>{const va=vByLabel(a),vb=vByLabel(b); if(va&&vb)addEdge(va.id,vb.id);});
+  selected=null; render(); pushHistory();
+};
+/* Parse edge text into a list of [labelA, labelB] pairs. Returns {pairs} or {error}. */
+function parseEdgeText(raw){
+  const tokens=raw.split(/\n|;|,(?![^({]*[)}])/).map(s=>s.trim()).filter(Boolean);
+  const pairs=[];
+  for(let tk of tokens){
+    tk=tk.replace(/[{}()]/g,'').trim(); if(!tk)continue;
+    let parts;
+    if(tk.includes(','))parts=tk.split(',');
+    else if(tk.includes('-'))parts=tk.split('-');
+    else if(/\s/.test(tk))parts=tk.split(/\s+/);
+    else parts=tk.match(/^([A-Za-z][A-Za-z0-9_]*?)([A-Za-z][A-Za-z0-9_]*)$/)?.slice(1)||[tk];
+    parts=parts.map(p=>p.trim()).filter(Boolean);
+    if(parts.length!==2) return {error:`Can't parse edge: "${tk}"`};
+    pairs.push([parts[0],parts[1]]);
+  }
+  return {pairs};
+}
+
+/* Apply edges onto the EXISTING vertex set (labels must already exist). */
+document.getElementById('eApply').onclick=()=>{
+  const errEl=document.getElementById('eErr'); errEl.textContent='';
+  const {pairs,error}=parseEdgeText(document.getElementById('eText').value);
+  if(error){errEl.textContent=error;return;}
+  const newE=[];
+  for(const [a,b] of pairs){
+    const va=vByLabel(a),vb=vByLabel(b);
+    if(!va){errEl.textContent=`Unknown vertex: ${a}. Use "Build from edges only" to create it.`;return;}
+    if(!vb){errEl.textContent=`Unknown vertex: ${b}. Use "Build from edges only" to create it.`;return;}
+    newE.push([va.id,vb.id]);
+  }
+  edges=[]; newE.forEach(([a,b])=>addEdge(a,b)); selected=null; render(); pushHistory();
+};
+
+/* Build the WHOLE graph from an edge set only — auto-create every vertex, then lay it out. */
+document.getElementById('eBuild').onclick=()=>{
+  const errEl=document.getElementById('eErr'); errEl.textContent='';
+  const {pairs,error}=parseEdgeText(document.getElementById('eText').value);
+  if(error){errEl.textContent=error;return;}
+  if(pairs.length===0){errEl.textContent='No edges to build from.';return;}
+  // preserve existing colors by label, then rebuild
+  const oldColors=new Map(vertices.map(v=>[v.label,v.color]));
+  vertices=[]; edges=[]; nextId=0; selected=null;
+  // create vertices in first-seen order so labels stay tidy
+  const order=[]; const seen=new Set();
+  for(const [a,b] of pairs){ for(const lab of [a,b]){ if(!seen.has(lab)){seen.add(lab); order.push(lab);} } }
+  const r=rect();
+  order.forEach((lab,i)=>{
+    // temporary spread so layout has something to grab; positions get overwritten by tidy
+    const ang=i/order.length*2*Math.PI;
+    const v=addVertex(r.width/2+120*Math.cos(ang), r.height/2+120*Math.sin(ang), lab);
+    if(oldColors.has(lab)&&oldColors.get(lab)) v.color=oldColors.get(lab);
+  });
+  for(const [a,b] of pairs){ const va=vByLabel(a),vb=vByLabel(b); if(va&&vb)addEdge(va.id,vb.id); }
+  render(); tidyLayout();   // tidyLayout pushes history + fits view
+};
+
+/* ---------- TikZ ---------- */
+function syncTikz(){
+  const H=rect().height;
+  const xs=vertices.map(v=>v.x), ys=vertices.map(v=>H-v.y);
+  const minX=Math.min(...xs,0),maxX=Math.max(...xs,1);
+  const minY=Math.min(...ys,0),maxY=Math.max(...ys,1);
+  const span=Math.max(maxX-minX,maxY-minY,1), scale=8/span;
+  const fmt=n=>Math.round(n*100)/100;
+
+  // collect distinct colors -> named definitions
+  const colorMap=new Map(); let ci=0;
+  vertices.forEach(v=>{ if(v.color && !colorMap.has(v.color)) colorMap.set(v.color, 'col'+(ci++)); });
+  let s='';
+  colorMap.forEach((name,hex)=>{
+    const c=hexToRgb(hex);
+    s+=`\\definecolor{${name}}{RGB}{${c.r},${c.g},${c.b}}\n`;
+  });
+  s+='\\begin{tikzpicture}[\n  every node/.style={circle,draw,fill=white,inner sep=2pt,minimum size=7mm,font=\\small}]\n';
+  vertices.forEach(v=>{
+    const style = v.color ? `[fill=${colorMap.get(v.color)},text=${textOn(v.color)==='#ffffff'?'white':'black'}]` : '';
+    s+=`  \\node${style} (${v.label}) at (${fmt((v.x-minX)*scale)},${fmt(((H-v.y)-minY)*scale)}) {$${v.label}$};\n`;
+  });
+  if(edges.length){
+    s+='  \\draw';
+    edges.forEach((e,i)=>{ s+=`${i?'        ':' '}(${vById(e.a).label}) -- (${vById(e.b).label})`+(i===edges.length-1?';\n':'\n'); });
+  }
+  s+='\\end{tikzpicture}';
+  document.getElementById('tikz').textContent=s;
+}
+document.getElementById('copyTikz').onclick=()=>{
+  navigator.clipboard.writeText(document.getElementById('tikz').textContent);
+  const b=document.getElementById('copyTikz'),t=b.textContent; b.textContent='Copied ✓'; setTimeout(()=>b.textContent=t,1200);
+};
+
+/* ---------- export (fits graph bounds, independent of zoom/pan) ---------- */
+function buildExportSVG(){
+  if(vertices.length===0){
+    const r=rect(), W=Math.round(r.width), H=Math.round(r.height);
+    return {svg:`<svg xmlns="${SVGNS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ffffff"/></svg>`,W,H};
+  }
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  vertices.forEach(v=>{minX=Math.min(minX,v.x);minY=Math.min(minY,v.y);maxX=Math.max(maxX,v.x);maxY=Math.max(maxY,v.y);});
+  const pad=50;
+  const ox=minX-pad, oy=minY-pad;
+  const W=Math.round((maxX-minX)+2*pad), H=Math.round((maxY-minY)+2*pad);
+  let body=`<rect width="${W}" height="${H}" fill="#ffffff"/>`;
+  edges.forEach(e=>{const a=vById(e.a),b=vById(e.b);if(!a||!b)return;
+    body+=`<line x1="${a.x-ox}" y1="${a.y-oy}" x2="${b.x-ox}" y2="${b.y-oy}" stroke="#b0b0b5" stroke-width="1.6" stroke-linecap="round"/>`;});
+  vertices.forEach(v=>{
+    const col=v.color;
+    const fill=col||'#ffffff', stroke=col?darken(col):'#1d1d1f', tcol=col?textOn(col):'#1d1d1f';
+    body+=`<circle cx="${v.x-ox}" cy="${v.y-oy}" r="${R}" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`;
+    body+=`<text x="${v.x-ox}" y="${v.y-oy}" text-anchor="middle" dominant-baseline="central" font-family="-apple-system, sans-serif" font-size="13" font-weight="600" fill="${tcol}">${v.label}</text>`;});
+  return {svg:`<svg xmlns="${SVGNS}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${body}</svg>`,W,H};
+}
+function rasterize(cb){
+  const {svg:str,W,H}=buildExportSVG();
+  const scale=2, img=new Image();
+  const url=URL.createObjectURL(new Blob([str],{type:'image/svg+xml;charset=utf-8'}));
+  img.onload=()=>{
+    const canvas=document.createElement('canvas'); canvas.width=W*scale; canvas.height=H*scale;
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height); URL.revokeObjectURL(url); cb(canvas,W,H);
+  };
+  img.src=url;
+}
+document.getElementById('jpgBtn').onclick=()=>rasterize(c=>{const a=document.createElement('a');a.download='graph.jpg';a.href=c.toDataURL('image/jpeg',0.95);a.click();});
+document.getElementById('pdfBtn').onclick=()=>rasterize((c,W,H)=>{const{jsPDF}=window.jspdf;const pdf=new jsPDF({orientation:W>=H?'l':'p',unit:'pt',format:[W,H]});pdf.addImage(c.toDataURL('image/jpeg',0.95),'JPEG',0,0,W,H);pdf.save('graph.pdf');});
+
+/* ---------- seed ---------- */
+window.addEventListener('load',()=>{
+  const r=rect(), cx=r.width*0.45, cy=r.height*0.5, rad=Math.min(r.width,r.height)*0.2;
+  for(let i=0;i<5;i++) addVertex(cx+rad*Math.cos(i/5*2*Math.PI-Math.PI/2), cy+rad*Math.sin(i/5*2*Math.PI-Math.PI/2));
+  addEdge(0,1);addEdge(1,2);addEdge(2,3);addEdge(3,4);addEdge(4,0);addEdge(0,2);
+  render();
+  pushHistory();   // baseline state for undo
+});
+window.addEventListener('resize',render);
+</script>
+</body>
+</html>
